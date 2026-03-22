@@ -56,7 +56,7 @@ CLIは人間とAIエージェント両方にとって普遍的なインターフ
 
 - **Python 3.10+**
 - 対象ソフトウェアがインストール済みであること（例：GIMP、Blender、LibreOffice、または独自のアプリケーション）
-- サポートされているAIコーディングエージェント: [Claude Code](#-claude-code) | [OpenClaw](#-openclaw) | [OpenCode](#-opencode) | [Codex](#-codex) | [Qodercli](#-qodercli) | [その他のプラットフォーム](#-その他のプラットフォーム近日公開)
+- サポートされているAIコーディングエージェント: [Claude Code](#-claude-code) | [OpenClaw](#-openclaw) | [OpenCode](#-opencode) | [Codex](#-codex) | [Qodercli](#-qodercli) | [Copilotcli](#-copilotcli) | [その他のプラットフォーム](#-その他のプラットフォーム近日公開)
 
 ### プラットフォームを選択
 
@@ -268,6 +268,28 @@ CLI-Anythingを使って./libreofficeを検証して
 ```
 
 CodexスキルはClaude CodeプラグインおよびOpenCodeコマンドと同じ方法論を適用しつつ、生成されるPythonハーネスのフォーマットは変更されません。
+</details>
+
+<details>
+
+<summary><h4 id="-copilotcli">⚡ Copilotcli <sup><code>コミュニティ</code></sup></h4></summary>
+
+**ステップ1: プラグインのインストール**
+
+```bash
+git clone https://github.com/HKUDS/CLI-Anything.git
+cd CLI-Anything
+copilot plugin install ./cli-anything-plugin
+```
+
+**ステップ2: CopilotcliからCLI-Anythingを使用**
+
+```bash
+/cli-anything:cli-anything ./gimp
+/cli-anything:refine ./gimp "バッチ処理とフィルタ"
+/cli-anything:validate ./gimp
+```
+
 </details>
 
 <details>

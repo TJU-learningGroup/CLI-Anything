@@ -84,7 +84,7 @@ CLI is the universal interface for both humans and AI agents:
 
 - **Python 3.10+**
 - Target software installed (e.g., GIMP, Blender, LibreOffice, or your own application)
-- A supported AI coding agent: [Claude Code](#-claude-code) | [OpenClaw](#-openclaw) | [OpenCode](#-opencode) | [Codex](#-codex) | [Qodercli](#-qodercli) | [More Platforms](#-more-platforms-coming-soon)
+- A supported AI coding agent: [Claude Code](#-claude-code) | [OpenClaw](#-openclaw) | [OpenCode](#-opencode) | [Codex](#-codex) | [Qodercli](#-qodercli) | [Copilotcli](#-copilotcli) | [More Platforms](#-more-platforms-coming-soon)
 
 ### Pick Your Platform
 
@@ -325,6 +325,28 @@ Use CLI-Anything to validate ./libreoffice
 
 The Codex skill adapts the same methodology used by the Claude Code plugin and
 OpenCode commands, while keeping the generated Python harness format unchanged.
+</details>
+
+<details>
+
+<summary><h4 id="-copilotcli">⚡ Copilotcli <sup><code>Community</code></sup></h4></summary>
+
+**Step 1: Install the Plugin**
+
+```bash
+git clone https://github.com/HKUDS/CLI-Anything.git
+cd CLI-Anything
+copilot plugin install ./cli-anything-plugin
+```
+
+**Step 2: Use CLI-Anything from Copilotcli**
+
+```bash
+/cli-anything:cli-anything ./gimp
+/cli-anything:refine ./gimp "batch processing and filters"
+/cli-anything:validate ./gimp
+```
+
 </details>
 
 <details>
