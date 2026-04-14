@@ -3,7 +3,7 @@
 ## Test Inventory Plan
 
 - `test_core.py`: 8 unit tests planned
-- `test_full_e2e.py`: 5 E2E tests planned
+- `test_full_e2e.py`: 6 E2E tests planned
 
 ## Unit Test Plan
 
@@ -48,6 +48,11 @@ Real workflows to test with installed calibre binaries:
 - Operations chained: export book → convert format
 - Verified: files exist, non-zero size, expected extension/magic where possible
 
+### Workflow: metadata edit and verify
+- Simulates: 对单本电子书文件做 metadata 自动化修订（标题/作者）
+- Operations chained: meta show → meta set (--title/--authors) → meta show
+- Verified: JSON 输出可解析；metadata 文本包含新 title/author；文件路径一致
+
 ---
 
 ## Test Results
@@ -80,10 +85,35 @@ cli_anything/calibre/tests/test_full_e2e.py::test_workflow_export_and_convert PA
 
 **15 / 15 passed.**
 
+Run date: 2026-04-14 (full E2E suite)
+
+Command:
+- `python -m pytest -v -s cli_anything\calibre\tests\test_full_e2e.py`
+
+```
+============================ test session starts =============================
+platform win32 -- Python 3.13.7, pytest-9.0.2, pluggy-1.6.0 -- D:\AAA_work\openP\.venv\Scripts\python.exe
+rootdir: D:\AAA_work\openP\CLI-Anything\calibre\agent-harness
+collected 8 items
+
+cli_anything/calibre/tests/test_full_e2e.py::TestCLISubprocess::test_help PASSED
+cli_anything/calibre/tests/test_full_e2e.py::test_calibredb_available PASSED
+cli_anything/calibre/tests/test_full_e2e.py::test_ebook_convert_available PASSED
+cli_anything/calibre/tests/test_full_e2e.py::test_json_library_command_requires_valid_library PASSED
+cli_anything/calibre/tests/test_full_e2e.py::test_meta_show_missing_file_errors PASSED
+cli_anything/calibre/tests/test_full_e2e.py::test_workflow_meta_set_then_show_reflects_changes PASSED
+cli_anything/calibre/tests/test_full_e2e.py::test_workflow_ingest_and_inspect PASSED
+cli_anything/calibre/tests/test_full_e2e.py::test_workflow_export_and_convert PASSED
+
+============================= 8 passed in 20.62s =============================
+```
+**8 / 8 passed.**
+
 ### Workflow coverage added
 
 - ingest and inspect: create temp calibre library → add sample EPUB → list/search/get in JSON mode
 - export and convert: export added book to temp directory → verify exported EPUB magic bytes → convert to MOBI → verify `BOOKMOBI` signature
+- metadata edit and verify: meta show → meta set (--title/--authors) → meta show (verify updated values in `ebook-meta` output)
 - Windows stability: tests use short temp paths and explicit subprocess decoding to avoid calibre path-length and console-encoding failures
 
 ### CLI verification

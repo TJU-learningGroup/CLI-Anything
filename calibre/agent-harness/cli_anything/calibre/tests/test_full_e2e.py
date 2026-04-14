@@ -181,6 +181,34 @@ def test_meta_show_missing_file_errors(cli_base, workflow_env):
     data = json.loads(result.stdout)
     assert data["type"] in {"file_not_found", "RuntimeError", "FileNotFoundError"}
 
+# 新增ebook-meta工作流：
+@pytest.mark.skipif(shutil.which("ebook-meta") is None, reason="ebook-meta not installed")
+def test_workflow_meta_set_then_show_reflects_changes(cli_base, workflow_env, sample_epub):
+  # 1) show before (JSON mode)
+  before = _run_cli(cli_base, ["--json", "meta", "show", str(sample_epub)], env=workflow_env)
+  assert before.returncode == 0
+  before_data = json.loads(before.stdout)
+  assert before_data["path"] == str(sample_epub)
+  assert isinstance(before_data["metadata"], str)
+  # 2) set title/authors
+  new_title = "Workflow Meta Title"
+  new_authors = "Workflow Meta Author"
+  set_result = _run_cli(
+      cli_base,
+      ["--json", "meta", "set", str(sample_epub), "--title", new_title, "--authors", new_authors],
+      env=workflow_env,
+  )
+  assert set_result.returncode == 0
+  set_data = json.loads(set_result.stdout)
+  assert set_data["path"] == str(sample_epub)
+  # 3) show after and assert new metadata appears
+  after = _run_cli(cli_base, ["--json", "meta", "show", str(sample_epub)], env=workflow_env)
+  assert after.returncode == 0
+  after_data = json.loads(after.stdout)
+  meta_text = after_data["metadata"]
+  assert new_title in meta_text
+  # authors formatting varies across calibre versions; keep it lenient:
+  assert "Workflow Meta Author" in meta_text 
 
 @pytest.mark.skipif(
     shutil.which("calibredb") is None or shutil.which("ebook-meta") is None,
