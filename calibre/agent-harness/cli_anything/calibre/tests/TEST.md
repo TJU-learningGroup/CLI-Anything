@@ -3,7 +3,7 @@
 ## Test Inventory Plan
 
 - `test_core.py`: 8 unit tests planned
-- `test_full_e2e.py`: 7 E2E tests planned
+- `test_full_e2e.py`: 16 E2E tests planned
 
 ## Unit Test Plan
 
@@ -32,9 +32,16 @@ Real workflows to test with installed calibre binaries:
 - create temp calibre library
 - add a sample EPUB into the library
 - list/search books in JSON mode
+- list books with sort/limit combinations
+- get library stats after mutation
 - export a book to a temp directory
+- export a catalog file
+- backup metadata to OPF
+- remove a book and verify it disappears
 - convert EPUB to another format
 - verify output artifacts exist and are non-empty
+- session status/save after library operations
+- convert presets/formats introspection and invalid preset error handling
 
 ## Realistic Workflow Scenarios
 
@@ -130,6 +137,26 @@ cli_anything/calibre/tests/test_full_e2e.py::test_workflow_library_mutation PASS
 ============================= 1 passed in 6.83s ==============================
 ```
 **1 / 1 passed.**
+
+Run date: 2026-04-22 (HARNESS-compliant, force-installed CLI)
+
+Command:
+- PowerShell: `$env:CLI_ANYTHING_FORCE_INSTALLED="1"; python -m pytest -q`
+
+Result:
+```
+22 passed in 44.02s
+```
+
+Run date: 2026-04-26 (extended workflow coverage)
+
+Command:
+- PowerShell: `$env:CLI_ANYTHING_FORCE_INSTALLED="1"; python -m pytest -q`
+
+Result:
+```
+25 passed in 61.35s
+```
 
 ### Workflow coverage added
 

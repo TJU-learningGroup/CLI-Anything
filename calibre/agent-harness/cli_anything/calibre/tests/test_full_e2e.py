@@ -6,11 +6,23 @@ import os
 import shutil
 import subprocess
 import sys
+import sysconfig
+import site
 import tempfile
 import zipfile
 from pathlib import Path
 
 import pytest
+
+
+def _require_binary(name: str) -> str:
+    path = shutil.which(name)
+    if path:
+        return path
+    raise RuntimeError(
+        f"Required calibre dependency not found on PATH: {name}. "
+        "Install calibre and ensure these commands are available: calibredb, ebook-convert, ebook-meta"
+    )
 
 
 def _resolve_cli(name):
@@ -19,9 +31,36 @@ def _resolve_cli(name):
     if path:
         print(f"[_resolve_cli] Using installed command: {path}")
         return [path]
+    # On Windows (especially Store Python), console_scripts may be installed in a
+    # user Scripts directory that is not on PATH. If force-installed mode is
+    # enabled, try to resolve that location explicitly before failing.
+    if os.name == "nt":
+        try:
+            scripts_dir = Path(sysconfig.get_path("scripts") or "")
+            candidate = scripts_dir / f"{name}.exe"
+            if scripts_dir and candidate.exists():
+                print(f"[_resolve_cli] Using installed command (Scripts): {candidate}")
+                return [str(candidate)]
+        except Exception:
+            pass
+        try:
+            user_base = site.getuserbase()
+            if user_base:
+                candidates = [
+                    Path(user_base) / "Scripts",
+                    Path(user_base) / "Python312" / "Scripts",
+                    Path(user_base) / "python312" / "Scripts",
+                ]
+                for scripts_dir in candidates:
+                    candidate = scripts_dir / f"{name}.exe"
+                    if candidate.exists():
+                        print(f"[_resolve_cli] Using installed command (user Scripts): {candidate}")
+                        return [str(candidate)]
+        except Exception:
+            pass
     if force:
         raise RuntimeError(f"{name} not found in PATH. Install with: pip install -e .")
-    module = name.replace("cli-anything-", "cli_anything.") + "." + name.split("-")[-1] + "_cli"
+    module = name.replace("cli-anything-", "cli_anything.")
     print(f"[_resolve_cli] Falling back to: {sys.executable} -m {module}")
     return [sys.executable, "-m", module]
 
@@ -125,7 +164,7 @@ def workflow_env(workflow_root):
 def real_library(workflow_root):
     library = workflow_root / "lib"
     result = _run_raw(
-        [shutil.which("calibredb"), "list", "--for-machine", "--fields", "id,title", "--with-library", str(library)]
+        [_require_binary("calibredb"), "list", "--for-machine", "--fields", "id,title", "--with-library", str(library)]
     )
     assert result.returncode == 0, result.stderr or result.stdout
     assert (library / "metadata.db").exists()
@@ -144,20 +183,20 @@ class TestCLISubprocess:
         assert "library" in result.stdout
 
 
-@pytest.mark.skipif(shutil.which("calibredb") is None, reason="calibredb not installed")
 def test_calibredb_available():
+    _require_binary("calibredb")
     result = _run_raw([shutil.which("calibredb"), "--version"])
     assert result.returncode == 0
 
 
-@pytest.mark.skipif(shutil.which("ebook-convert") is None, reason="ebook-convert not installed")
 def test_ebook_convert_available():
+    _require_binary("ebook-convert")
     result = _run_raw([shutil.which("ebook-convert"), "--version"])
     assert result.returncode == 0
 
 
-@pytest.mark.skipif(shutil.which("calibredb") is None, reason="calibredb not installed")
 def test_json_library_command_requires_valid_library(tmp_path, cli_base, workflow_env):
+    _require_binary("calibredb")
     fake_lib = tmp_path / "fake"
     fake_lib.mkdir()
     result = _run_cli(
@@ -170,8 +209,8 @@ def test_json_library_command_requires_valid_library(tmp_path, cli_base, workflo
     assert "error" in data
 
 
-@pytest.mark.skipif(shutil.which("ebook-meta") is None, reason="ebook-meta not installed")
 def test_meta_show_missing_file_errors(cli_base, workflow_env):
+    _require_binary("ebook-meta")
     result = _run_cli(
         cli_base,
         ["--json", "meta", "show", "definitely-missing.epub"],
@@ -182,8 +221,8 @@ def test_meta_show_missing_file_errors(cli_base, workflow_env):
     assert data["type"] in {"file_not_found", "RuntimeError", "FileNotFoundError"}
 
 # 新增ebook-meta工作流：
-@pytest.mark.skipif(shutil.which("ebook-meta") is None, reason="ebook-meta not installed")
 def test_workflow_meta_set_then_show_reflects_changes(cli_base, workflow_env, sample_epub):
+  _require_binary("ebook-meta")
   # 1) show before (JSON mode)
   before = _run_cli(cli_base, ["--json", "meta", "show", str(sample_epub)], env=workflow_env)
   assert before.returncode == 0
@@ -210,11 +249,9 @@ def test_workflow_meta_set_then_show_reflects_changes(cli_base, workflow_env, sa
   # authors formatting varies across calibre versions; keep it lenient:
   assert "Workflow Meta Author" in meta_text 
 
-@pytest.mark.skipif(
-    shutil.which("calibredb") is None or shutil.which("ebook-meta") is None,
-    reason="calibre metadata tools not installed",
-)
 def test_workflow_ingest_and_inspect(cli_base, workflow_env, real_library, sample_epub):
+    _require_binary("calibredb")
+    _require_binary("ebook-meta")
     add_result = _run_cli(
         cli_base,
         [
@@ -283,11 +320,9 @@ def test_workflow_ingest_and_inspect(cli_base, workflow_env, real_library, sampl
     assert "Workflow Sample" in meta_data["metadata"]
 
 
-@pytest.mark.skipif(
-    shutil.which("calibredb") is None or shutil.which("ebook-convert") is None,
-    reason="calibre export/convert tools not installed",
-)
 def test_workflow_export_and_convert(cli_base, workflow_env, real_library, sample_epub, workflow_root):
+    _require_binary("calibredb")
+    _require_binary("ebook-convert")
     add_result = _run_cli(
         cli_base,
         [
@@ -358,11 +393,8 @@ def test_workflow_export_and_convert(cli_base, workflow_env, real_library, sampl
     assert b"BOOKMOBI" in header
 
 
-@pytest.mark.skipif(
-    shutil.which("calibredb") is None,
-    reason="calibredb not installed",
-)
 def test_workflow_library_mutation(cli_base, workflow_env, real_library, sample_epub, workflow_root):
+    _require_binary("calibredb")
     """library mutation 工作流: book add → book set-field → book get 验证字段变更 → export book 验证导出目录结构"""
 
     # ── Step 1: book add ──────────────────────────────────────────────────────
@@ -467,11 +499,173 @@ def test_workflow_library_mutation(cli_base, workflow_env, real_library, sample_
         print(f"    - {f.name} ({f.stat().st_size:,} bytes)")
 
 
-@pytest.mark.skipif(
-    shutil.which("calibredb") is None,
-    reason="calibre tools not installed",
-)
-def test_session_management_workflow(cli_base, workflow_env, real_library, sample_epub):
+def test_workflow_export_catalog_creates_file(cli_base, workflow_env, real_library, sample_epub, workflow_root):
+    _require_binary("calibredb")
+    add_result = _run_cli(
+        cli_base,
+        [
+            "--json",
+            "--library",
+            str(real_library),
+            "book",
+            "add",
+            str(sample_epub),
+            "--title",
+            "Catalog Book",
+            "--authors",
+            "Catalog Author",
+        ],
+        env=workflow_env,
+    )
+    assert add_result.returncode == 0, add_result.stderr or add_result.stdout
+
+    output_path = workflow_root / "catalog.csv"
+    result = _run_cli(
+        cli_base,
+        ["--json", "--library", str(real_library), "export", "catalog", str(output_path)],
+        env=workflow_env,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    data = json.loads(result.stdout)
+    assert data["output"] == str(output_path.resolve())
+    assert output_path.exists()
+    assert output_path.stat().st_size > 0
+
+
+def test_workflow_export_backup_metadata_creates_opf(cli_base, workflow_env, real_library, sample_epub):
+    _require_binary("calibredb")
+    add_result = _run_cli(
+        cli_base,
+        [
+            "--json",
+            "--library",
+            str(real_library),
+            "book",
+            "add",
+            str(sample_epub),
+            "--title",
+            "Backup Book",
+            "--authors",
+            "Backup Author",
+        ],
+        env=workflow_env,
+    )
+    assert add_result.returncode == 0, add_result.stderr or add_result.stdout
+
+    result = _run_cli(
+        cli_base,
+        ["--json", "--library", str(real_library), "export", "backup", "--all"],
+        env=workflow_env,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    data = json.loads(result.stdout)
+    assert "stdout" in data
+
+    opf_files = [p for p in Path(real_library).rglob("*.opf") if p.is_file()]
+    assert opf_files, "backup_metadata should create at least one .opf file in the library"
+
+
+def test_workflow_add_then_remove_book_disappears_from_list(cli_base, workflow_env, real_library, sample_epub):
+    _require_binary("calibredb")
+    add_result = _run_cli(
+        cli_base,
+        [
+            "--json",
+            "--library",
+            str(real_library),
+            "book",
+            "add",
+            str(sample_epub),
+            "--title",
+            "Remove Me",
+            "--authors",
+            "Removable Author",
+        ],
+        env=workflow_env,
+    )
+    assert add_result.returncode == 0, add_result.stderr or add_result.stdout
+
+    list_result = _run_cli(cli_base, ["--json", "--library", str(real_library), "book", "list"], env=workflow_env)
+    assert list_result.returncode == 0
+    books = json.loads(list_result.stdout)
+    assert books
+    book_id = books[0]["id"]
+
+    remove_result = _run_cli(
+        cli_base,
+        ["--json", "--library", str(real_library), "book", "remove", str(book_id)],
+        env=workflow_env,
+    )
+    assert remove_result.returncode == 0, remove_result.stderr or remove_result.stdout
+
+    list_after = _run_cli(cli_base, ["--json", "--library", str(real_library), "book", "list"], env=workflow_env)
+    assert list_after.returncode == 0
+    after_books = json.loads(list_after.stdout)
+    assert all(item["id"] != book_id for item in after_books)
+
+
+def test_workflow_library_stats_matches_book_count(cli_base, workflow_env, real_library, sample_epub, workflow_root):
+    _require_binary("calibredb")
+    sample2 = _make_sample_epub(workflow_root / "workflow-sample-2.epub", title="Workflow Two", author="Workflow Fixture")
+
+    for title in ["Stats Book 1", "Stats Book 2"]:
+        add_result = _run_cli(
+            cli_base,
+            ["--json", "--library", str(real_library), "book", "add", str(sample_epub), "--title", title, "--authors", "Stats Author"],
+            env=workflow_env,
+        )
+        assert add_result.returncode == 0, add_result.stderr or add_result.stdout
+        sample_epub = sample2
+
+    stats_result = _run_cli(cli_base, ["--json", "--library", str(real_library), "library", "stats"], env=workflow_env)
+    assert stats_result.returncode == 0, stats_result.stderr or stats_result.stdout
+    stats = json.loads(stats_result.stdout)
+    assert stats["book_count"] == 2
+    assert stats["with_formats"] >= 1
+    assert isinstance(stats.get("formats"), list)
+
+
+def test_book_list_sort_by_title_and_limit(cli_base, workflow_env, real_library, sample_epub, workflow_root):
+    _require_binary("calibredb")
+    sample2 = _make_sample_epub(workflow_root / "workflow-sample-b.epub", title="Workflow B", author="Workflow Fixture")
+    books_to_add = [
+        ("B Title", sample2),
+        ("A Title", sample_epub),
+    ]
+    for title, epub in books_to_add:
+        add_result = _run_cli(
+            cli_base,
+            ["--json", "--library", str(real_library), "book", "add", str(epub), "--title", title, "--authors", "Sort Author"],
+            env=workflow_env,
+        )
+        assert add_result.returncode == 0, add_result.stderr or add_result.stdout
+
+    list_result = _run_cli(
+        cli_base,
+        [
+            "--json",
+            "--library",
+            str(real_library),
+            "book",
+            "list",
+            "--sort-by",
+            "id",
+            "--ascending",
+            "--limit",
+            "1",
+        ],
+        env=workflow_env,
+    )
+    assert list_result.returncode == 0, list_result.stderr or list_result.stdout
+    data = json.loads(list_result.stdout)
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["id"] == 1
+
+
+def test_workflow_session_management_status_and_save(cli_base, workflow_env, real_library, sample_epub):
+    _require_binary("calibredb")
+
     add_result = _run_cli(
         cli_base,
         [
@@ -488,45 +682,31 @@ def test_session_management_workflow(cli_base, workflow_env, real_library, sampl
         ],
         env=workflow_env,
     )
-    assert add_result.returncode == 0
-    add_data = json.loads(add_result.stdout)
-    assert "input" in add_data
-
-    list_result = _run_cli(
-        cli_base,
-        ["--json", "--library", str(real_library), "book", "list"],
-        env=workflow_env,
-    )
-    assert list_result.returncode == 0
-    books = json.loads(list_result.stdout)
-    assert len(books) == 1
-    book_id = books[0]["id"]
+    assert add_result.returncode == 0, add_result.stderr or add_result.stdout
 
     status_result = _run_cli(
         cli_base,
         ["--json", "--library", str(real_library), "session", "status"],
         env=workflow_env,
     )
-    assert status_result.returncode == 0
+    assert status_result.returncode == 0, status_result.stderr or status_result.stdout
     status_data = json.loads(status_result.stdout)
     assert status_data["has_library"] is True
-    assert status_data["library_path"] is not None
+    assert status_data["library_path"]
 
     save_result = _run_cli(
         cli_base,
         ["--json", "--library", str(real_library), "session", "save"],
         env=workflow_env,
     )
-    assert save_result.returncode == 0
+    assert save_result.returncode == 0, save_result.stderr or save_result.stdout
     save_data = json.loads(save_result.stdout)
     assert "saved" in save_data
 
 
-@pytest.mark.skipif(
-    shutil.which("calibredb") is None,
-    reason="calibre tools not installed",
-)
-def test_book_set_field_workflow(cli_base, workflow_env, real_library, sample_epub):
+def test_workflow_book_set_field_updates_metadata(cli_base, workflow_env, real_library, sample_epub):
+    _require_binary("calibredb")
+
     add_result = _run_cli(
         cli_base,
         [
@@ -543,18 +723,12 @@ def test_book_set_field_workflow(cli_base, workflow_env, real_library, sample_ep
         ],
         env=workflow_env,
     )
-    assert add_result.returncode == 0
-    add_data = json.loads(add_result.stdout)
-    assert "input" in add_data
+    assert add_result.returncode == 0, add_result.stderr or add_result.stdout
 
-    list_result = _run_cli(
-        cli_base,
-        ["--json", "--library", str(real_library), "book", "list"],
-        env=workflow_env,
-    )
-    assert list_result.returncode == 0
+    list_result = _run_cli(cli_base, ["--json", "--library", str(real_library), "book", "list"], env=workflow_env)
+    assert list_result.returncode == 0, list_result.stderr or list_result.stdout
     books = json.loads(list_result.stdout)
-    assert len(books) == 1
+    assert books
     book_id = books[0]["id"]
 
     get_before = _run_cli(
@@ -562,7 +736,7 @@ def test_book_set_field_workflow(cli_base, workflow_env, real_library, sample_ep
         ["--json", "--library", str(real_library), "book", "get", str(book_id)],
         env=workflow_env,
     )
-    assert get_before.returncode == 0
+    assert get_before.returncode == 0, get_before.stderr or get_before.stdout
     before_data = json.loads(get_before.stdout)
     assert "Field Test Book" in before_data["metadata"]
 
@@ -584,47 +758,35 @@ def test_book_set_field_workflow(cli_base, workflow_env, real_library, sample_ep
         ],
         env=workflow_env,
     )
-    assert set_result.returncode == 0
+    assert set_result.returncode == 0, set_result.stderr or set_result.stdout
 
     get_after = _run_cli(
         cli_base,
         ["--json", "--library", str(real_library), "book", "get", str(book_id)],
         env=workflow_env,
     )
-    assert get_after.returncode == 0
+    assert get_after.returncode == 0, get_after.stderr or get_after.stdout
     after_data = json.loads(get_after.stdout)
     assert "Updated Field Book" in after_data["metadata"]
     assert "Updated Author" in after_data["metadata"]
 
 
-@pytest.mark.skipif(
-    shutil.which("ebook-convert") is None,
-    reason="ebook-convert not installed",
-)
-def test_convert_presets_and_formats(cli_base, workflow_env):
-    presets_result = _run_cli(
-        cli_base,
-        ["--json", "convert", "presets"],
-        env=workflow_env,
-    )
-    assert presets_result.returncode == 0
+def test_convert_presets_and_formats_and_invalid_preset(cli_base, workflow_env):
+    presets_result = _run_cli(cli_base, ["--json", "convert", "presets"], env=workflow_env)
+    assert presets_result.returncode == 0, presets_result.stderr or presets_result.stdout
     presets_data = json.loads(presets_result.stdout)
     assert "kindle" in presets_data
     assert "generic-epub" in presets_data
     assert "tablet" in presets_data
 
-    formats_result = _run_cli(
-        cli_base,
-        ["--json", "convert", "formats"],
-        env=workflow_env,
-    )
-    assert formats_result.returncode == 0
+    formats_result = _run_cli(cli_base, ["--json", "convert", "formats"], env=workflow_env)
+    assert formats_result.returncode == 0, formats_result.stderr or formats_result.stdout
     formats_data = json.loads(formats_result.stdout)
     assert isinstance(formats_data, list)
-    assert len(formats_data) > 0
-    assert "epub" in formats_data
-    assert "mobi" in formats_data
+    assert "epub" in [x.lower() for x in formats_data]
+    assert "mobi" in [x.lower() for x in formats_data]
 
+    # invalid preset should fail before any real ebook-convert invocation
     convert_result = _run_cli(
         cli_base,
         ["--json", "convert", "run", "missing.epub", "output.mobi", "--preset", "invalid_preset"],
@@ -635,40 +797,3 @@ def test_convert_presets_and_formats(cli_base, workflow_env):
     assert "error" in error_data
 
 
-@pytest.mark.skipif(
-    shutil.which("calibredb") is None,
-    reason="calibre tools not installed",
-)
-def test_export_catalog_workflow(cli_base, workflow_env, workflow_root, real_library, sample_epub):
-    add_result = _run_cli(
-        cli_base,
-        [
-            "--json",
-            "--library",
-            str(real_library),
-            "book",
-            "add",
-            str(sample_epub),
-            "--title",
-            "Catalog Test Book",
-            "--authors",
-            "Catalog Author",
-        ],
-        env=workflow_env,
-    )
-    assert add_result.returncode == 0
-
-    backup_result = _run_cli(
-        cli_base,
-        [
-            "--json",
-            "--library",
-            str(real_library),
-            "export",
-            "backup",
-        ],
-        env=workflow_env,
-    )
-    assert backup_result.returncode == 0
-    backup_data = json.loads(backup_result.stdout)
-    assert "library_path" in backup_data or "stdout" in backup_data

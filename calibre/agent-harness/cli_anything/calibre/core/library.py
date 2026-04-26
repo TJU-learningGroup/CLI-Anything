@@ -23,13 +23,16 @@ def open_library(path: str) -> dict[str, Any]:
 
 
 def get_library_info(path: str) -> dict[str, Any]:
-    books = backend.calibredb_list(path, fields="id,title", limit=100000)
+    books = backend.calibredb_list(path, fields="id,title,authors,formats", limit=100000)
     author_names = set()
     format_names = set()
     for book in books:
         for author in (book.get("authors") or []):
             author_names.add(author)
-        for fmt in (book.get("formats") or []):
+        formats = book.get("formats") or []
+        if isinstance(formats, str):
+            formats = [x.strip() for x in formats.split(",") if x.strip()]
+        for fmt in formats:
             format_names.add(str(fmt).lower())
     return {
         "library_path": os.path.abspath(path),
