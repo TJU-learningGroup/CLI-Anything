@@ -158,12 +158,19 @@ def calibredb_export(
 
 
 def calibredb_catalog(library_path: str, output_path: str, search: str | None = None) -> dict[str, Any]:
+    # calibredb's `catalog` subcommand is unusual: it requires the output filename
+    # to appear immediately after `catalog` (before any options). Some calibre
+    # builds treat `--with-library` as an option and will error if it appears
+    # before the output filename.
+    exe = find_calibredb()
     abs_output = os.path.abspath(output_path)
+    abs_library = os.path.abspath(library_path)
     os.makedirs(os.path.dirname(abs_output), exist_ok=True)
-    args = ["catalog", abs_output]
+
+    cmd = [exe, "catalog", abs_output, "--with-library", abs_library]
     if search:
-        args.extend(["--search", search])
-    result = run_calibredb(args, library_path=library_path, timeout=300)
+        cmd.extend(["--search", search])
+    result = _run(cmd, timeout=300)
     return {"output": abs_output, "stdout": result["stdout"].strip()}
 
 
